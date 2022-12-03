@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+    <title>Vrlo jednostavna HTML5 igra</title>
+    <style>
+        canvas {
+            border: 1px solid #000000;
+            background-color: #f1f1f1;
+        }
+    </style>
+    <script>
+        let myGamePieces = []
+
+        const CANVAS_DIM = 1000
+        const MIN_COMPONENTS = 20
+        const MAX_COMPONENTS = 15
+        const PIECE_DIMENSION = 50
+
+        const TOP_Y_CLICK = 0
+
+        function randInt(low, high) {
+            return Math.floor(Math.random() * high) + low
+        }
+
+        function randRange(low, high) {
+            return Math.random() * high + low
+        }
+
+        function choice(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        const myGameArea = {
+            canvas: null,
+            poppedCounter: 0,
+            totalCounter: 0,
+            start: function () {
+                this.canvas = document.getElementById("myGameCanvas")
+                this.canvas.width = CANVAS_DIM;
+                this.canvas.height = CANVAS_DIM;
+                this.context = this.canvas.getContext("2d");
+
+
+                this.totalCounter = myGamePieces.length
+                document.body.insertBefore(this.canvas, document.body.childNodes[0]);
+
+
+                this.canvas.addEventListener("mousedown", (e) => {
+                    let x = e.clientX;
+                    let y = e.clientY - TOP_Y_CLICK;
+
+                    for (let i = 0; i < myGamePieces.length; i++) {
+                        let gamePiece = myGamePieces[i];
+                        if (x > gamePiece.x - PIECE_DIMENSION / 2 && x <= gamePiece.x + PIECE_DIMENSION / 2 && y > gamePiece.y - PIECE_DIMENSION / 2 && y <= gamePiece.y + PIECE_DIMENSION / 2) {
+                            if (gamePiece.hit) continue
+                            gamePiece.hit = true
+                            this.poppedCounter += 1
+                            this.totalCounter -= 1
+                        }
+                    }
+
+                })
+                this.frameNo = 0;
+                this.interval = setInterval(() => updateGameArea(this.totalCounter, this.poppedCounter), 20);
+            },
+            stop: function () {
+                clearInterval(this.interval);
+            },
+            clear: function () {
+                this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+        };
+
+        function startGame() {
+            let speeds = [-2, -1, 1, 2]
+            for (let i = 0; i < randInt(MIN_COMPONENTS, MAX_COMPONENTS); i++) {
+                let r = () => Math.random() * 256 >> 0;
+                let color = `rgb(${r()}, ${r()}, ${r()})`;
+                let gamePiece = new component(PIECE_DIMENSION, PIECE_DIMENSION, color, choice(speeds), choice(speeds), randInt(PIECE_DIMENSION, CANVAS_DIM - PIECE_DIMENSION), randInt(PIECE_DIMENSION, CANVAS_DIM - PIECE_DIMENSION));
+                myGamePieces.push(gamePiece)
+            }
+            myGameArea.start();
+        }
+
+
+        function component(width, height, color, sx, sy, x, y) {
+            this.hit = false
+            this.width = width;
+            this.height = height;
+            this.speed_x = sx;
+            this.speed_y = sy;
+            this.speedValue = 2;
+            this.x = x;
+            this.y = y;
+            this.update = function (ctx) {
+                if (this.hit) return;
+                ctx.fillStyle = color;
+                ctx.fillRect(this.x - this.width / 2, this.y - this.height / 2, this.width, this.height);
+
+            }
+            this.newPos = function () {
+                if (this.hit) return;
+                if (this.x - this.width / 2 < 0) {
+                    this.speedValue += randRange(0, 1);
+                    this.speed_x = this.speedValue;
+                } else if ((this.x + this.width / 2) >= myGameArea.context.canvas.width) {
+                    this.speedValue += randRange(0, 1);
+                    this.speed_x = -this.speedValue;
+                }
+                if (this.y - this.height / 2 < 0) {
+                    this.speedValue += randRange(0, 1);
+                    this.speed_y = -this.speedValue;
+                } else if ((this.y + this.height / 2) >= myGameArea.context.canvas.height) {
+                    this.speedValue += randRange(0, 1);
+                    this.speed_y = this.speedValue;
+                }
+                this.x += this.speed_x;
+                this.y -= this.speed_y;
+            }
+        }
+
+        function updateGameArea(totalCounter, poppedCounter) {
+            myGameArea.clear();
+            let ctx = myGameArea.context;
+            for (let i = 0; i < myGamePieces.length; i++) {
+                let myGamePiece = myGamePieces[i]
+                if (myGamePiece.hit) continue
+                myGamePiece.newPos();
+                myGamePiece.update(ctx);
+
+                myGamePiece.bounced = false
+            }
+            for (let i = 0; i < myGamePieces.length; i++) {
+                for (let j = 0; j < myGamePieces.length; j++) {
+                    if (i === j) continue; // ne usporeduj sa samim sobom
+                    let rect1 = myGamePieces[i]
+                    let rect2 = myGamePieces[j]
+                    if (rect1.hit || rect2.hit || rect2.bounced) continue; // ne usporeduj ako je poppan rect vec
+
+                    let collisionLeft = rect1.x < rect2.x + rect2.width
+                    let collisionRight = rect1.x + rect1.width > rect2.x
+                    let collisionUp = rect1.y < rect2.y + rect2.height
+                    let collisionDown = rect1.height + rect1.y > rect2.y
+
+                    if (collisionLeft && collisionRight && collisionUp && collisionDown) { // overlap
+
+                        let diffX = Math.abs(rect1.x - rect2.x)
+                        let diffY = Math.abs(rect1.y - rect2.y)
+
+                        let rect1SignX = Math.sign(rect1.speed_x)
+                        let rect1SignY = Math.sign(rect1.speed_y)
+                        let rect2SignX = Math.sign(rect2.speed_x)
+                        let rect2SignY = Math.sign(rect2.speed_y)
+
+
+                        if(diffY > diffX){
+                            let speedYSum = Math.abs(rect1.speed_y) + Math.abs(rect2.speed_y)
+                            //BOUNCEAJ U Y smjeru osim ako je vec resolveano
+                            if (rect1.y > rect2.y && rect1.speed_y > 0 && rect2.speed_y < 0
+                                || rect1.y < rect2.y && rect1.speed_y < 0 && rect2.speed_y > 0
+                            ) {
+
+                                rect1.speed_y = rect1SignY * (speedYSum / 2) * -1
+                                rect2.speed_y = rect2SignY * (speedYSum / 2) * -1
+
+                                rect1.y -= rect1.speed_y
+                                rect2.y -= rect2.speed_y
+                            } else {
+                                //micu se gore
+                                if (Math.sign(rect1.speed_y) > 0) {
+                                    if (rect1.y < rect2.y) {
+                                        rect1.speed_y *= -1
+                                    } else {
+                                        rect2.speed_y *= -1
+                                    }
+
+                                } else {
+                                    if (rect1.y < rect2.y) {
+                                        rect2.speed_y *= -1
+                                    } else {
+                                        rect1.speed_y *= -1
+                                    }
+                                }
+                            }
+                        }
+                        else{
+                            let speedXSum = Math.abs(rect1.speed_x) + Math.abs(rect2.speed_x)
+                            //BOUNCEAJ U X smjeru osim ako je vec resolveano
+                            if (rect1.x > rect2.x && rect1.speed_x > 0 && rect2.speed_x < 0
+                                || rect1.x < rect2.x && rect1.speed_x < 0 && rect2.speed_x > 0
+                            ) {
+                                rect1.speed_x = rect1SignX * (speedXSum / 2) * -1
+                                rect2.speed_x = rect2SignX * (speedXSum / 2) * -1
+
+                                rect1.x -= rect1.speed_x
+                                rect2.x -= rect2.speed_x
+
+                            } else {
+                                //micu se gore
+                                if (Math.sign(rect1.speed_x) > 0) {
+                                    if (rect1.x < rect2.x) {
+                                        rect1.speed_x *= -1
+                                    } else {
+                                        rect2.speed_x *= -1
+                                    }
+
+                                } else {
+                                    if (rect1.x < rect2.x) {
+                                        rect2.speed_x *= -1
+                                    } else {
+                                        rect1.speed_x *= -1
+                                    }
+                                }
+                            }
+                        }
+
+
+
+
+                    }
+
+                }
+
+            }
+
+
+            ctx.font = "28px serif";
+            ctx.fillStyle = "black";
+            ctx.fillText("Total: " + totalCounter, 750, 50)
+            ctx.fillText("Popped: " + poppedCounter, 750, 100);
+        }
+    </script>
+</head>
+
+
+<body onload="startGame()">
+<div id="container">
+    <canvas id="myGameCanvas"></canvas>
+</div>
+</body>
+</html>
+
+
